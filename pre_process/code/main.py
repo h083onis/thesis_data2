@@ -2,7 +2,7 @@ from git import Repo
 import sys
 import subprocess
 import argparse
-from take_data import out_piece_snippet, out_snippet_to_txt, out_txt
+from pre_process.code.utils import out_piece_snippet, out_snippet_to_txt, out_txt
 
 
 def is_auth_ext(file_path, auth_ext):
@@ -29,7 +29,6 @@ def tokenize(command, repo, hexsha, filepath, type):
         output = repo.git.show(hexsha+"~1"+':'+filepath)
     else:
         output = repo.git.show(hexsha+':'+filepath)
-    output = repo.git.show(hexsha+':'+filepath)
     process.stdin.write(output.encode(errors='ignore'))
     process.stdin.close()
     output = process.communicate()[0]
