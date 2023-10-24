@@ -1,3 +1,4 @@
+import time
 import sys
 import json
 import subprocess
@@ -6,24 +7,24 @@ from gitdb.exc import BadName
 import argparse
 import pandas as pd
 from utils import out_code_dict, out_txt
-from exclude_comment import exclude_comment
+from exclude_comment4 import exclude_comment
 
 def is_auth_ext(file_path, auth_ext):
     splited_file = file_path.split('.')
-    if len(splited_file) >= 2 and splited_file[-1] in auth_ext:
+    if len(splited_file) >= 2 and splited_file[-1].lower() in auth_ext:
         return True
     else:
         return False
+    
 
-
-def diff_texts(filepath, hexsha, commit_dict):
-    command = 'diff -B -w -u -0 ../resource/pre_process_data/before.txt ../pre_process_data/resource/after.txt'
+def diff_texts(codes_dict):
+    command = 'diff -B -w -u -0 ../resource/pre_process_data/before.txt ../resource/pre_process_data/after.txt'
     process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
     output = process.communicate()[0]
     code_dict = out_code_dict(output.decode('utf-8','ignore'))
-    commit_dict[hexsha]['codes'][filepath]['added_code'].append(code_dict['added_code'])
-    commit_dict[hexsha]['codes'][filepath]['deleted_code'].append(code_dict['deleted_code'])
-    return commit_dict
+    codes_dict['added_code'].extend(code_dict['added_code'])
+    codes_dict['deleted_code'].extend(code_dict['deleted_code'])
+    return codes_dict
         
         
 def print_code(repo, hexsha, filepath, ext, type):
@@ -41,26 +42,32 @@ def pipe_process(repo, commit, hexsha, params, commit_dict, type):
         for filepath in commit.stats.files:
             if is_auth_ext(filepath, auth_ext) == False:
                 continue
-            ext = filepath.split('.')[1]
-            commit_dict[hexsha]['codes'][filepath] = {}
-            commit_dict[hexsha]['codes'][filepath]['added_code'] = []
-            commit_dict[hexsha]['codes'][filepath]['deleted_code'] = []
+            ext = filepath.split('.')[-1].lower()
+            codes_dict = {}
+            codes_dict['filepath'] = filepath
+            # print(filepath)
+            codes_dict['added_code'] = []
+            codes_dict['deleted_code'] = []
             with open('../resource/pre_process_data/before.txt','w', encoding='utf-8') as f:
                 f.truncate(0)
             print_code(repo, hexsha, filepath, ext, type='after')
-            
-            commit_dict = diff_texts(filepath, hexsha, commit_dict)
+    
+            codes_dict = diff_texts(codes_dict)
+            if codes_dict['added_code'] == [] and codes_dict['deleted_code'] == []:
+                continue
+            commit_dict['codes'].append(codes_dict)
     
     else:
         diff = commit.diff(hexsha)
         for item in diff:
             if is_auth_ext(item.b_path, auth_ext) == False:
                 continue
-            ext = item.b_path.split('.')[1]
-            commit_dict[hexsha]['codes'][item.b_path] = {}
-            commit_dict[hexsha]['codes'][item.b_path]['added_code'] = []
-            commit_dict[hexsha]['codes'][item.b_path]['deleted_code'] = []
-            
+            ext = item.b_path.split('.')[-1].lower()
+            codes_dict = {}
+            codes_dict['filepath'] = item.b_path
+            codes_dict['added_code'] = []
+            codes_dict['deleted_code'] = []
+            # print(item.b_path)
             ch_type = item.change_type
             if ch_type == 'M' or ch_type == 'R':
                 print_code(repo, hexsha, item.a_path, ext, type='before')
@@ -68,65 +75,51 @@ def pipe_process(repo, commit, hexsha, params, commit_dict, type):
             elif ch_type == 'A' or ch_type == 'C':
                 with open('../resource/pre_process_data/before.txt','w', encoding='utf-8') as f:
                     f.truncate(0)
-            
                 print_code(repo, hexsha, item.b_path, ext, type='after')
             else:
                 continue
             
-            commit_dict = diff_texts(item.b_path, hexsha, commit_dict)
+            codes_dict = diff_texts(codes_dict)
+            if codes_dict['added_code'] == [] and codes_dict['deleted_code'] == []:
+                continue
+            commit_dict['codes'].append(codes_dict)
 
     return commit_dict
 
 
 def excute(params):
-    commit_dict = {}
+    commit_list = []
     df = pd.read_csv(params.csv_filename, index_col=0)
     repo_list = list(df['repo_name'].unique())
-    
     for repo_name in repo_list:
         print(repo_name)    
         repo = Repo('../resource/repo/'+params.project+'/'+repo_name)
         id_list = df.loc[df['repo_name'] == repo_name, 'commit_id']
         for hexsha in id_list:
-            commit_dict[hexsha] = {}
+            commit_dict = {}
+            commit_dict['commit_id'] = hexsha
             commit = repo.commit(hexsha)
-            commit_dict[hexsha]['msg'] = commit.message
-            commit_dict[hexsha]['codes'] = {}
- 
+            commit_dict['timestamp'] = commit.authored_date
+            commit_dict['msg'] = commit.message
+            commit_dict['codes'] = []
+            print(hexsha)
             try:
                 commit = repo.commit(hexsha+'~1')
                 commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='normal')
             except (IndexError, BadName):   
                 commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='first')
-        break
+            commit_list.append(commit_dict)
     
     with open(params.json_name, 'w') as f:
-        json.dump(commit_dict, f, indent=2)
+        json.dump(commit_list, f, indent=2)
     
-    # hexsha = '0026b80cd2a484ad9d685ff5a4f89e6c9815f913'
-    # repo_name ='qtbase'
-    # repo = Repo('../resource/repo/'+params.project+'/'+repo_name)
-    # commit_dict[hexsha] = {}
-    # commit = repo.commit(hexsha)
-    # commit_dict[hexsha]['msg'] = commit.message
-    # commit_dict[hexsha]['codes'] = {}
-
-    # try:
-    #     commit = repo.commit(hexsha+'~1')
-    #     commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='normal')
-    # except (IndexError, BadName):   
-    #     commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='first')
-    # with open('test.json', 'w') as f:
-    #     json.dump(commit_dict, f, indent=2)
-    
-
-
+  
 def read_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('-csv_filename', type=str)
     parser.add_argument('-project', type=str, default='qt')
     parser.add_argument('-json_name', type=str, default='qt2.json')
-    parser.add_argument('-auth_ext', type=str, default='java,c,h,cpp,hpp,ts,js,py')
+    parser.add_argument('-auth_ext', type=str, default='java,c,h,cpp,hpp,py')
     return parser
 
 

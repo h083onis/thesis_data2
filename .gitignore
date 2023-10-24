@@ -1,5 +1,5 @@
 pre_process/resource/
-
+*.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
