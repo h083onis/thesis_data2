@@ -7,7 +7,7 @@ from gitdb.exc import BadName
 import argparse
 import pandas as pd
 from utils import out_code_dict, out_txt
-from exclude_comment4 import exclude_comment
+from exclude_comment import exclude_comment
 
 def is_auth_ext(file_path, auth_ext):
     splited_file = file_path.split('.')

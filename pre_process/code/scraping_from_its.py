@@ -48,7 +48,7 @@ def scraping_from_its(in_json_name, out_json_name, repo_name):
                 pass
             try:
                 element = driver.find_element(By.ID, id4)
-                issue_dict['discription'] = element.text
+                issue_dict['description'] = element.text
             except NoSuchElementException:
                 pass
             if 'priority_level' not in issue_dict.keys() and 'discription' not in issue_dict.keys():
@@ -82,9 +82,9 @@ def scraping_from_its(in_json_name, out_json_name, repo_name):
             except NoSuchElementException:
                 pass
             try:
-                issue_dict['priority_level'] = []
                 element = driver.find_element(By.CSS_SELECTOR, selector2)
                 trlist = element.find_elements(By.TAG_NAME, 'tr')
+                issue_dict['priority_level'] = []
                 for i in range(0, len(trlist)):
                     tds = trlist[i].find_elements(By.TAG_NAME, 'td')
                     if len(tds) == 6:
@@ -94,7 +94,7 @@ def scraping_from_its(in_json_name, out_json_name, repo_name):
                 pass
             try:
                 element = driver.find_element(By.CSS_SELECTOR, selector3)
-                issue_dict['discription'] = element.text
+                issue_dict['description'] = element.text
             except NoSuchElementException:
                 pass
             if 'priority_level' not in issue_dict.keys() and 'discription' not in issue_dict.keys():

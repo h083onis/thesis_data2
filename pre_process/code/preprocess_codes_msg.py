@@ -7,6 +7,7 @@ from pygments.lexers import PythonLexer
 from pygments.lexers import JavaLexer
 from pygments.lexers import CLexer
 from pygments.lexers import CppLexer
+from pygments.token import Token
 import sys
 import json
 
@@ -37,27 +38,30 @@ def tokenize_code(code, ext):
         
     code_list = []
     for token in tokens:
-        if token[1].isidentifier():
-            tmp_list = ronin.split(token[1])
-            for tmp in tmp_list:
-                code_list.append(tmp.strip().lower())
+        if token[0] in Token.String:
+            code_list.append('<literal>')
+        elif token[0] in Token.Name:
+            code_list.extend(['<num>' if tmp.isnumeric() else tmp.strip().lower() for tmp in ronin.split(token[1])])
+        elif token[0] in Token.Text:
+            continue
         else:
             code_list.append(token[1].strip().lower())
-    return [token for token in code_list if token != '']
+    # return [tmp for tmp in code_list if tmp != '']
+    return code_list
 
 
 def process_codes(codes_list, codes_word_dict):
     codes_list2 = []
     for code_dict in codes_list:
         token_dict = {}
-        token_filepath = [token.lower() for token in ronin.split(code_dict['filepath'])]
+        ext = code_dict['filepath'].split('.')[-1]
+        token_filepath = tokenize_code(code_dict['filepath'], ext)
         codes_word_dict = update_dict(token_filepath, codes_word_dict, type='code')
         token_dict['filepath'] = token_filepath
         
         for kind in ['added_code', 'deleted_code']:
             token_dict[kind] = []
             for line in code_dict[kind]:
-                ext = code_dict['filepath'].split('.')[-1]
                 token_list = tokenize_code(line,ext)
                 token_dict[kind].append(token_list)
                 codes_word_dict = update_dict(token_list, codes_word_dict, type='code')
@@ -83,9 +87,9 @@ def update_dict(word_list, word_dict, type):
     return word_dict
 
 
-def main(in_json_file, commit_inf_json, msg_vcb_json, codes_vcb_json):
-    json_open = open(in_json_file, 'r')
-    json_load = json.load(json_open)
+def main(in_json_file, commit_inf_json, msg_dict_json, codes_dict_json):
+    with open(in_json_file, 'r') as f_in:
+        json_load = json.load(f_in)
     msg_word_dict = {}
     codes_word_dict = {}
     commit_list = []
@@ -101,21 +105,16 @@ def main(in_json_file, commit_inf_json, msg_vcb_json, codes_vcb_json):
         commit_dict['codes'] = codes_list
         commit_list.append(commit_dict)    
         
-    with open(commit_inf_json, 'w') as f:
-        json.dump(commit_list, f, indent=2)
-    
-    with open(msg_vcb_json, 'w') as f:
-        json.dump(msg_word_dict, f, indent=2)
-        
-    with open(codes_vcb_json, 'w') as f:
-        json.dump(codes_word_dict, f, indent=2)
-    
+    with open(commit_inf_json, 'w') as f_commit, open(msg_dict_json, 'w') as f_msg, open(codes_dict_json, 'w') as f_codes:
+        json.dump(commit_list, f_commit, indent=2)
+        json.dump(msg_word_dict, f_msg, indent=2)
+        json.dump(codes_word_dict, f_codes, indent=2)
     
 if __name__ == '__main__':
     in_json_file = sys.argv[1]
     commit_inf_json = sys.argv[2]
-    msg_vcb_json = sys.argv[3]
-    codes_vcb_json = sys.argv[4]
-    main(in_json_file, commit_inf_json, msg_vcb_json, codes_vcb_json)
+    msg_dict_json = sys.argv[3]
+    codes_dict_json = sys.argv[4]
+    main(in_json_file, commit_inf_json, msg_dict_json, codes_dict_json)
 
     
