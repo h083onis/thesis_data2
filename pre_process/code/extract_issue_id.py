@@ -10,7 +10,7 @@ def main(in_json_name, out_json_name, repo_name):
     if repo_name == 'qt':
         pattern = r'QTBUG-\d+'
     elif repo_name == 'openstack':
-        pattern = r'bug.*\b(\d{6,})'
+        pattern = r'bug[|.*\b](\d{6,})'
     else:
         return False
             
@@ -19,9 +19,11 @@ def main(in_json_name, out_json_name, repo_name):
         commit_dict = {}
         commit_dict['commit_id'] = commit['commit_id']
         result = repatter.findall(commit['msg'])
+        print(result)
         if result == []:
             continue
-        commit_dict['issue_id'] = list(set(result))
+        else:
+            commit_dict['issue_id'] = list(set(value for tup in result for value in tup if value != ''))
         its_list.append(commit_dict)
 
     with open(out_json_name, 'w') as f:

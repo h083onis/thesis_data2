@@ -10,7 +10,7 @@ class State(Enum):
     STRING_DUBLE_LITERAL = 5
 
 def exclude_comment(text, ext):
-    if ext == 'java' or ext == 'cpp' or ext== 'hpp' or ext == 'c' or ext == 'h':
+    if ext == 'java' or ext == 'cpp' or ext== 'hpp' or ext == 'cxx' or ext== 'hxx' or ext == 'c' or ext == 'h':
         result = []
         prev = ''
         state = State.CODE

@@ -1,146 +1,129 @@
-from git import Repo
+import time
 import sys
+import json
 import subprocess
+from git import Repo
+from gitdb.exc import BadName
 import argparse
-from pre_process.code.utils import out_piece_snippet, out_snippet_to_txt, out_txt
-
+import pandas as pd
+from utils import out_code_dict, out_txt
+from exclude_comment import exclude_comment
 
 def is_auth_ext(file_path, auth_ext):
     splited_file = file_path.split('.')
-    if len(splited_file) == 2 and splited_file[1] in auth_ext:
+    if len(splited_file) >= 2 and splited_file[-1].lower() in auth_ext:
         return True
     else:
         return False
+    
 
-
-def diff_texts(diff_range, cnt, snippet_filename):
-    range_list = diff_range.split('-')
-    for i in range(range_list[0], range_list[1]+1):
-        command = 'diff -u -'+ str(i) +' ../resource/before.txt ../resource/after.txt'
-        process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
-        output = process.communicate()[0]
-        snippet_list = out_piece_snippet(output.decode('utf-8'))
-        out_snippet_to_txt('../resource/' + snippet_filename + '_' + str(i) + '.txt', str(cnt), snippet_list)
-
-
-def tokenize(command, repo, hexsha, filepath, type):
-    process = subprocess.Popen(command.split(), stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+def diff_texts(codes_dict):
+    command = 'diff -B -w -u -0 ../resource/pre_process_data/before.txt ../resource/pre_process_data/after.txt'
+    process = subprocess.Popen(command.split(), stdout=subprocess.PIPE)
+    output = process.communicate()[0]
+    code_dict = out_code_dict(output.decode('utf-8','ignore'))
+    codes_dict['added_code'].extend(code_dict['added_code'])
+    codes_dict['deleted_code'].extend(code_dict['deleted_code'])
+    return codes_dict
+        
+        
+def print_code(repo, hexsha, filepath, ext, type):
     if type == 'before':
         output = repo.git.show(hexsha+"~1"+':'+filepath)
     else:
         output = repo.git.show(hexsha+':'+filepath)
-    process.stdin.write(output.encode(errors='ignore'))
-    process.stdin.close()
-    output = process.communicate()[0]
-    out_txt('../resource/+'+type+'.txt', output.decode('utf-8'))
-    return process
+    output = exclude_comment(output, ext)
+    out_txt('../resource/pre_process_data/'+type+'.txt', output)
 
 
-def pipe_process_first(cnt, repo,commit, hexsha, f_each_commit_file_inf ,f_error, params):
-    error_ctx = ''
-    command = 'java -jar ../package/tokenizer.jar'
-
-    ch_type = 'A'
-    for filepath in commit.stats.files:
-        if is_auth_ext(filepath, params.auth_ext) == False:
-            continue
-
-        with open('../resource/before.txt','w', encoding='utf-8') as f:
-            f.truncate(0)
-        process1 = tokenize(command,  repo, hexsha, filepath, type='after')
-        process1.wait()
-        if process1.returncode != 0:
-            error_ctx = hexsha+','+ch_type+','+filepath
-            print(error_ctx, file=f_error)
-            continue
-        cnt += 1
-
-        diff_texts(params.diff_range, cnt, params.snippet_filename)
-
-        print(str(cnt)+','+hexsha+','+filepath+','+filepath +','+ch_type, file=f_each_commit_file_inf)
-        
-    return cnt   
-    
-    
-def pipe_process(cnt, repo, commit, hexsha, f_each_commit_file_inf, f_error, params):
-    error_ctx = ''
-    command = 'java -jar ../package/tokenizer.jar'
-
-    diff = commit.diff(hexsha)
-    for item in diff:
-        if is_auth_ext(item.b_path, params.auth_ext) == False:
-            continue
-        ch_type = item.change_type
-        
-        if ch_type == 'M' or ch_type == 'R':
-            process1 = tokenize(command, repo, hexsha, item.a_path, type='before')
-            process2 = tokenize(command, repo, hexsha, item.b_path, type='after')
-            process1.wait()
-            process2.wait()
-            if process1.returncode != 0 or process2.returncode != 0:
-                error_ctx = hexsha+','+ch_type+','+item.b_path
-                print(error_ctx, file=f_error)
+def pipe_process(repo, commit, hexsha, params, commit_dict, type):
+    auth_ext = params.auth_ext.split(',')
+    if type == 'first':
+        for filepath in commit.stats.files:
+            if is_auth_ext(filepath, auth_ext) == False:
                 continue
-      
-        elif ch_type == 'A':
-            with open('../resource/before.txt','w', encoding='utf-8') as f:
+            ext = filepath.split('.')[-1].lower()
+            codes_dict = {}
+            codes_dict['filepath'] = filepath
+            # print(filepath)
+            codes_dict['added_code'] = []
+            codes_dict['deleted_code'] = []
+            with open('../resource/pre_process_data/before.txt','w', encoding='utf-8') as f:
                 f.truncate(0)
-            
-            process3 = tokenize(command, repo, hexsha, item.b_path, type='after') 
-            process3.wait()
-            if process3.returncode != 0:
-                error_ctx = hexsha+','+ch_type+','+item.b_path
-                print(error_ctx, file=f_error)
+            print_code(repo, hexsha, filepath, ext, type='after')
+    
+            codes_dict = diff_texts(codes_dict)
+            if codes_dict['added_code'] == [] and codes_dict['deleted_code'] == []:
                 continue
-        
-        else:
-            continue
-        
-        cnt += 1
-        diff_texts(params.diff_range, cnt, params.snippet_filename)
-        print(str(cnt)+','+hexsha+','+item.a_path+','+item.b_path +','+ch_type, file=f_each_commit_file_inf)
-        
-    return cnt
-  
+            commit_dict['codes'].append(codes_dict)
+    
+    else:
+        diff = commit.diff(hexsha)
+        for item in diff:
+            if is_auth_ext(item.b_path, auth_ext) == False:
+                continue
+            ext = item.b_path.split('.')[-1].lower()
+            codes_dict = {}
+            codes_dict['filepath'] = item.b_path
+            codes_dict['added_code'] = []
+            codes_dict['deleted_code'] = []
+            # print(item.b_path)
+            ch_type = item.change_type
+            if ch_type == 'M' or ch_type == 'R':
+                print_code(repo, hexsha, item.a_path, ext, type='before')
+                print_code(repo, hexsha, item.b_path, ext, type='after')
+            elif ch_type == 'A' or ch_type == 'C':
+                with open('../resource/pre_process_data/before.txt','w', encoding='utf-8') as f:
+                    f.truncate(0)
+                print_code(repo, hexsha, item.b_path, ext, type='after')
+            else:
+                continue
+            
+            codes_dict = diff_texts(codes_dict)
+            if codes_dict['added_code'] == [] and codes_dict['deleted_code'] == []:
+                continue
+            commit_dict['codes'].append(codes_dict)
+
+    return commit_dict
+
 
 def excute(params):
-    cnt = 0
-    repo = Repo(params.repo_path)
-    head = repo.head
+    commit_list = []
+    df = pd.read_csv(params.csv_filename, index_col=0)
+    repo_list = list(df['repo_name'].unique())
+    for repo_name in repo_list:
+        print(repo_name)    
+        repo = Repo('../resource/repo/'+params.project+'/'+repo_name)
+        id_list = df.loc[df['repo_name'] == repo_name, 'commit_id']
+        for hexsha in id_list:
+            commit_dict = {}
+            commit_dict['commit_id'] = hexsha
+            commit = repo.commit(hexsha)
+            commit_dict['timestamp'] = commit.authored_date
+            commit_dict['msg'] = commit.message
+            commit_dict['codes'] = []
+            print(hexsha)
+            try:
+                commit = repo.commit(hexsha+'~1')
+                commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='normal')
+            except (IndexError, BadName):   
+                commit_dict = pipe_process(repo, commit, hexsha, params, commit_dict, type='first')
+            commit_list.append(commit_dict)
     
-    if head.is_detached:
-        pointer = head.commit.hexsha
-    else:
-        pointer = head.reference
-        
-    commits = list(repo.iter_commits(pointer))
-    commits.reverse()
-    with open('../resource/'+params.hexsha_filename, 'a', encoding='utf-8') as f_each_commit_file_inf, \
-            open('../resource/'+params.error_log_filename, 'a', encoding='utf-8') as f_error:
-        for i, item in enumerate(commits):
-            print(i)
-            print(item.hexsha)
-            target_hexsha = item.hexsha
-            if not item.parents:
-                commit = repo.commit(target_hexsha)
-                cnt = pipe_process_first(cnt, repo, commit, target_hexsha, f_each_commit_file_inf, f_error, params)
-            else:
-                commit = repo.commit(target_hexsha+'~1')
-                cnt = pipe_process(cnt, repo, commit, target_hexsha, f_each_commit_file_inf, f_error, params)
-
-
+    with open(params.json_name, 'w') as f:
+        json.dump(commit_list, f, indent=2)
+    
+  
 def read_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-repo_path', type=str)
-    parser.add_argument('-hexsha_filename', type=str, defalut='hexsha.txt')
-    parser.add_argument('-snippet_filename', type=str, default='snippet.txt')
-    parser.add_argument('-error_log_filename', type=str, defalut='error_log.txt')
-    parser.add_argument('-auth_ext', type=str, default='java')
-    parser.add_argument('-diff_range', type=str, default='1-10')
+    parser.add_argument('-csv_filename', type=str)
+    parser.add_argument('-project', type=str, default='qt')
+    parser.add_argument('-json_name', type=str, default='qt2.json')
+    parser.add_argument('-auth_ext', type=str, default='java,c,h,cpp,hpp,cxx,hxx,py')
+    return parser
 
 
 if __name__ == '__main__':
     params = read_args().parse_args()
     excute(params)
     sys.exit(0)
-
