@@ -39,28 +39,12 @@ def read_args():
     
 if __name__ == '__main__':
     #不均衡対策openstack lgb
-    # openstack_params_lgb = {
-    #     'objective': 'binary',
-    #     'metric': 'binary_logloss',
-    #     'verbosity': -1,
-    #     'feature_pre_filter': False,
-    #     'lambda_l1': 2.808e-06,
-    #     'lambda_l2': 4.025e-07,
-    #     'num_leaves': 3,
-    #     'feature_fraction': 0.4,
-    #     'bagging_fraction': 0.9875,
-    #     'bagging_freq': 1,
-    #     'min_child_samples': 20,
-    #     'random_state': 100,
-    #     'num_iterations': 10000,
-    #     'early_stopping_rounds': 10,
-    # }
-    
     openstack_params_lgb = {
         'objective': 'binary',
         'metric': 'binary_logloss',
         'learning_rate': 0.01,
         'verbosity': -1,
+        'random_state': 100,
         'num_iterations': 10000,
         'feature_pre_filter': False,
         'lambda_l1': 0.01,
@@ -75,23 +59,6 @@ if __name__ == '__main__':
     }
  
     #不均衡対策qt lgb
-    # qt_params_lgb ={
-    #     'objective': 'binary',
-    #     'metric': 'binary_logloss',
-    #     'learning_rate':0.1,
-    #     'verbosity': -1,
-    #     'feature_pre_filter': False,
-    #     'lambda_l1': 0.006,
-    #     'lambda_l2': 0.004,
-    #     'num_leaves': 8,
-    #     'feature_fraction': 0.4,
-    #     'bagging_fraction': 0.866,
-    #     'bagging_freq': 6,
-    #     'min_child_samples': 50,
-    #     'random_state': 100,
-    #     'num_iterations': 1000,
-    #     'early_stopping_rounds': 10,
-    # }
     qt_params_lgb = {
         'objective': 'binary',
         'metric': 'binary_logloss',

@@ -23,9 +23,7 @@ class ModelLGB(Model):
         self.model = lgb.train(params, dtrain, num_boost_round = num_round, 
                                 valid_names=['train','valid'], valid_sets=[dtrain, dvalid],
                                 callbacks=[lgb.early_stopping(stopping_rounds=early_stopping_rounds)])
-        df = pd.read_csv('../resource/feature_importance2.csv', header=0, index_col=0)
-        df.loc[self.run_fold_name] = self.model.feature_importance(importance_type='gain')
-        df.to_csv('../resource/feature_importance2.csv')
+        
         self.save_model()
 
     def predict(self, te_dataset):
